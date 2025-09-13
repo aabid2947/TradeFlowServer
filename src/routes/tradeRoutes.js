@@ -28,7 +28,7 @@ router.get('/my-trades', getMyTrades);
 // @route   GET /api/trades/pending-for-me
 // @desc    Get pending trades where current user is the seller
 // @access  Private (Sellers only)
-router.get('/pending-for-me', authorize('seller'), getPendingTradesForSeller);
+router.get('/pending-for-me', authorize('seller', 'buyer'), getPendingTradesForSeller);
 
 // @route   GET /api/trades/:id
 // @desc    Get details of a single trade

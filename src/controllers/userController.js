@@ -101,6 +101,72 @@ export const login = async (req, res, next) => {
   }
 };
 
+// Google authentication
+export const googleAuth = async (req, res, next) => {
+  try {
+    const { email, displayName, photoURL, uid } = req.body;
+
+    if (!email || !uid) {
+      return next(new AppError('Email and UID are required for Google authentication', 400));
+    }
+
+    // Check if user already exists
+    let user = await User.findOne({ 
+      $or: [
+        { email: email },
+        { googleId: uid }
+      ]
+    });
+
+    if (user) {
+      // Update Google ID if not set
+      if (!user.googleId) {
+        user.googleId = uid;
+        await user.save();
+      }
+    } else {
+      // Create new user for Google sign-in
+      const userData = {
+        email: email,
+        username: email.split('@')[0] + '_' + Date.now(), // Generate unique username
+        displayName: displayName || email.split('@')[0],
+        photoURL: photoURL,
+        googleId: uid,
+        role: 'buyer', // Default role
+        isVerified: true, // Google accounts are pre-verified
+        authProvider: 'google'
+      };
+
+      user = await User.create(userData);
+    }
+
+    // Generate tokens
+    const token = user.generateToken();
+    const refreshToken = user.generateRefreshToken();
+
+    // Save refresh token to user
+    user.refreshTokens.push({ token: refreshToken });
+    await user.save();
+
+    // Remove sensitive data from response
+    user.password = undefined;
+    user.refreshTokens = undefined;
+
+    res.json({
+      success: true,
+      message: 'Google authentication successful',
+      data: {
+        user,
+        token,
+        refreshToken
+      }
+    });
+
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Refresh access token
 export const refreshToken = async (req, res, next) => {
   try {

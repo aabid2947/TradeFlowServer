@@ -14,6 +14,7 @@ import userRoutes from './src/routes/userRoutes.js';
 import paymentRoutes from './src/routes/paymentRoutes.js'; // <-- IMPORT NEW ROUTES
 import listingRoutes from './src/routes/listingRoutes.js'; // <-- IMPORT LISTING ROUTES
 import tradeRoutes from './src/routes/tradeRoutes.js'; // <-- IMPORT TRADE ROUTES
+import chatRoutes from './src/routes/chatRoutes.js'; // <-- IMPORT CHAT ROUTES
 // Import middleware
 import { errorHandler } from './src/middleware/errorHandler.js';
 import { notFound } from './src/middleware/notFound.js';
@@ -77,6 +78,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/payments', paymentRoutes); // <-- USE NEW ROUTES
 app.use('/api/listings',listingRoutes)
 app.use('/api/trades', tradeRoutes); // <-- USE TRADE ROUTES
+app.use('/api/chats', chatRoutes); // <-- USE CHAT ROUTES
 
 // 404 handler
 app.use(notFound);

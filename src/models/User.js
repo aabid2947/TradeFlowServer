@@ -25,7 +25,10 @@ const userSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: [true, 'Password is required'],
+    required: function() {
+      // Password not required for Google OAuth users
+      return !this.googleId;
+    },
     minlength: [8, 'Password must be at least 8 characters long'],
     select: false
   },
@@ -62,6 +65,15 @@ const userSchema = new mongoose.Schema({
     accountNumber: String,
     ifscCode: String,
   },
+  phoneNumber: {
+    type: String,
+    trim: true,
+    match: [/^[0-9]{10}$/, 'Phone number must be 10 digits']
+  },
+  address: {
+    type: String,
+    trim: true
+  },
   isActive: {
     type: Boolean,
     default: true
@@ -95,7 +107,20 @@ const userSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
-  lockUntil: Date
+  lockUntil: Date,
+  
+  // OAuth fields
+  googleId: {
+    type: String,
+    sparse: true // Allow null values but ensure uniqueness when present
+  },
+  displayName: String,
+  photoURL: String,
+  authProvider: {
+    type: String,
+    enum: ['local', 'google'],
+    default: 'local'
+  }
 }, {
   timestamps: true,
   toJSON: { virtuals: true },

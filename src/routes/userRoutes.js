@@ -3,6 +3,7 @@ import User from '../models/User.js';
 import {
   register,
   login,
+  googleAuth,
   refreshToken,
   logout,
   logoutAll,
@@ -23,6 +24,7 @@ import {
 import {
   validateRegistration,
   validateLogin,
+  validateGoogleAuth,
   validatePasswordChange,
   validateProfileUpdate,
   validateTokenTransfer
@@ -33,6 +35,7 @@ const router = express.Router();
 // Public routes
 router.post('/register', validateRegistration, register);
 router.post('/login', validateLogin, login);
+router.post('/google-auth', validateGoogleAuth, googleAuth);
 router.post('/refresh-token', verifyRefreshToken, refreshToken);
 
 // Protected routes (require authentication)

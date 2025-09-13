@@ -74,6 +74,52 @@ export const validateLogin = [
   handleValidationErrors
 ];
 
+// Google authentication validation
+export const validateGoogleAuth = [
+  body('email')
+    .isEmail()
+    .withMessage('Valid email is required')
+    .normalizeEmail()
+    .toLowerCase(),
+  
+  body('uid')
+    .notEmpty()
+    .withMessage('Google UID is required')
+    .trim(),
+  
+  body('displayName')
+    .optional()
+    .trim(),
+  
+  body('photoURL')
+    .optional()
+    .isURL()
+    .withMessage('Photo URL must be a valid URL'),
+  
+  handleValidationErrors
+];
+
+// Phone authentication validation
+export const validatePhoneAuth = [
+  body('phoneNumber')
+    .matches(/^\+[1-9]\d{1,14}$/)
+    .withMessage('Phone number must be in international format (+1234567890)'),
+  
+  body('firebaseUid')
+    .notEmpty()
+    .withMessage('Firebase UID is required'),
+  
+  body('username')
+    .optional()
+    .isLength({ min: 3, max: 30 })
+    .withMessage('Username must be between 3 and 30 characters')
+    .matches(/^[a-zA-Z0-9_]+$/)
+    .withMessage('Username can only contain letters, numbers, and underscores')
+    .trim(),
+  
+  handleValidationErrors
+];
+
 // Password change validation
 export const validatePasswordChange = [
   body('currentPassword')

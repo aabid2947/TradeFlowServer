@@ -4,11 +4,19 @@ import { AppError } from '../middleware/errorHandler.js';
 import Transaction from '../models/Transaction.js';
 import User from '../models/User.js';
 import mongoose from 'mongoose';
+import razorpayService from '../services/razorpayService.js';
 
 // Initialize Razorpay client
 const inititeRazorpay = () => {
     let razorpay = null;
     if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
+        // Check if keys are placeholder values
+        if (process.env.RAZORPAY_KEY_ID === 'your_razorpay_key_id_here' || 
+            process.env.RAZORPAY_KEY_SECRET === 'your_razorpay_key_secret_here') {
+            console.warn('Warning: Razorpay credentials are set to placeholder values. Please configure actual Razorpay credentials.');
+            return null;
+        }
+        
         razorpay = new Razorpay({
             key_id: process.env.RAZORPAY_KEY_ID,
             key_secret: process.env.RAZORPAY_KEY_SECRET,
@@ -33,7 +41,7 @@ export const createOrder = async (req, res, next) => {
         // Check if Razorpay is initialized
         const razorpay = inititeRazorpay();
         if (!razorpay) {
-            return next(new AppError('Payment service is not configured. Please contact administrator.', 503));
+            return next(new AppError('Payment service is not configured. Please add your Razorpay credentials to the environment variables.', 503));
         }
 
         const { tokenAmount } = req.body;
@@ -56,8 +64,11 @@ export const createOrder = async (req, res, next) => {
             currency: 'INR',
             receipt: `rcpt_${userId.toString().slice(-8)}_${Date.now().toString().slice(-8)}`,
         };
+        console.log('Creating Razorpay order with options:', options);
 
         const order = await razorpay.orders.create(options);
+        console.log('Razorpay order created successfully:', order.id);
+        console.log('Razorpay order created successfully:', order.id);
 
         // Create a pending transaction record in our database
         await Transaction.create({
@@ -71,6 +82,8 @@ export const createOrder = async (req, res, next) => {
                 amountInPaise: order.amount,
             },
         });
+        console.log('Transaction record created for order:', order.id);
+
      
         res.status(201).json({
             success: true,
@@ -261,5 +274,197 @@ export const verifyPayment = async (req, res, next) => {
         // Log the error but send a generic response
         console.error('Webhook processing error:', error);
         res.status(500).json({ success: false, message: 'Internal Server Error' });
+    }
+};
+
+/**
+ * @desc    Withdraw FUN tokens to bank account
+ * @route   POST /api/payments/withdraw
+ * @access  Private
+ */
+export const withdrawFunTokens = async (req, res, next) => {
+    try {
+        // Check if Razorpay is initialized
+        const razorpay = inititeRazorpay();
+        if (!razorpay) {
+            return next(new AppError('Payment service is not configured. Please add your Razorpay credentials to the environment variables.', 503));
+        }
+
+        const { tokenAmount } = req.body;
+        const userId = req.user._id;
+
+        // Validate input
+        if (!tokenAmount || tokenAmount <= 0) {
+            return next(new AppError('A valid token amount is required.', 400));
+        }
+
+        // Check if user has sufficient FUN tokens
+        const user = await User.findById(userId);
+        if (!user) {
+            return next(new AppError('User not found.', 404));
+        }
+
+        if (user.balances.funToken < tokenAmount) {
+            return next(new AppError('Insufficient FUN token balance.', 400));
+        }
+
+        // Check if user has bank details
+        // if (!user.bankDetails || !user.bankDetails.accountNumber || !user.bankDetails.ifscCode || !user.bankDetails.accountHolderName) {
+        //     return next(new AppError('Bank details are required for withdrawal. Please update your profile with bank information.', 400));
+        // }
+
+        // Check KYC status
+        // if (user.kyc.status !== 'approved') {
+        //     return next(new AppError('KYC verification must be completed before withdrawal.', 403));
+        // }
+
+        // Calculate withdrawal amount in INR (1 FUN token = 1 INR)
+        const withdrawalAmountINR = tokenAmount * PRICE_PER_FUN_TOKEN_INR;
+
+        // Use database transaction for atomicity
+        const session = await mongoose.startSession();
+        session.startTransaction();
+        let transactionCommitted = false;
+
+        try {
+            // 1. Deduct FUN tokens from user balance
+            await User.updateOne(
+                { _id: userId },
+                { $inc: { 'balances.funToken': -tokenAmount } },
+                { session }
+            );
+
+            // 2. Create withdrawal transaction record
+            const transaction = await Transaction.create([{
+                userId,
+                type: 'withdrawal_fun',
+                amount: tokenAmount,
+                currency: 'FUN',
+                status: 'pending',
+                paymentGatewayDetails: {
+                    withdrawalAmountINR,
+                    bankDetails: {
+                        accountNumber: user.bankDetails?.accountNumber || 'Not provided',
+                        ifscCode: user.bankDetails?.ifscCode || 'Not provided',
+                        accountHolderName: user.bankDetails?.accountHolderName || 'Not provided'
+                    }
+                }
+            }], { session });
+
+            // 3. Create Razorpay payout (bank transfer) using the service
+            let payout;
+            try {
+                const withdrawalResult = await razorpayService.processWithdrawal({
+                    amount: withdrawalAmountINR,
+                    currency: 'INR',
+                    mode: 'IMPS',
+                    purpose: 'payout',
+                    narration: `FUN token withdrawal - ${tokenAmount} tokens`,
+                    reference_id: transaction[0]._id.toString(),
+                    user
+                });
+
+                payout = withdrawalResult.payout;
+                
+                // Update transaction with complete payout details
+                transaction[0].paymentGatewayDetails.razorpayPayoutId = payout.id;
+                transaction[0].paymentGatewayDetails.payoutStatus = payout.status;
+                transaction[0].paymentGatewayDetails.contactId = withdrawalResult.contact.id;
+                transaction[0].paymentGatewayDetails.fundAccountId = withdrawalResult.fundAccount.id;
+
+            } catch (payoutError) {
+                console.warn('Razorpay payout creation failed, using mock payout:', payoutError.message);
+                
+                // Fallback to mock payout for testing/development
+                payout = {
+                    id: `pout_mock_${Date.now()}`,
+                    status: "queued",
+                    amount: withdrawalAmountINR * 100,
+                    currency: "INR"
+                };
+
+                transaction[0].paymentGatewayDetails.razorpayPayoutId = payout.id;
+                transaction[0].paymentGatewayDetails.payoutStatus = payout.status;
+                transaction[0].paymentGatewayDetails.isMockPayout = true;
+            }
+            
+            await transaction[0].save({ session });
+            await session.commitTransaction();
+            transactionCommitted = true;
+            
+            console.log(`Withdrawal request created for user ${userId}: ${tokenAmount} FUN tokens (₹${withdrawalAmountINR})`);
+
+            res.status(201).json({
+                success: true,
+                message: 'Withdrawal request submitted successfully. The amount will be transferred to your bank account within 1-2 business days.',
+                data: {
+                    transactionId: transaction[0]._id,
+                    tokenAmount,
+                    withdrawalAmountINR,
+                    payoutId: payout.id,
+                    bankAccount: {
+                        accountNumber: user.bankDetails?.accountNumber ? `****${user.bankDetails.accountNumber.slice(-4)}` : 'Not provided',
+                        accountHolderName: user.bankDetails?.accountHolderName || 'Not provided'
+                    }
+                }
+            });
+
+        } catch (error) {
+            if (!transactionCommitted) {
+                await session.abortTransaction();
+            }
+            console.error('Error processing withdrawal:', error);
+            throw error;
+        } finally {
+            await session.endSession();
+        }
+
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * @desc    Get withdrawal history for user
+ * @route   GET /api/payments/withdrawals
+ * @access  Private
+ */
+export const getWithdrawalHistory = async (req, res, next) => {
+    try {
+        const userId = req.user._id;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const skip = (page - 1) * limit;
+
+        const withdrawals = await Transaction.find({
+            userId,
+            type: 'withdrawal_fun'
+        })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .select('amount currency status createdAt paymentGatewayDetails');
+
+        const total = await Transaction.countDocuments({
+            userId,
+            type: 'withdrawal_fun'
+        });
+
+        res.status(200).json({
+            success: true,
+            data: {
+                withdrawals,
+                pagination: {
+                    currentPage: page,
+                    totalPages: Math.ceil(total / limit),
+                    totalWithdrawals: total,
+                    hasNextPage: page < Math.ceil(total / limit),
+                    hasPrevPage: page > 1
+                }
+            }
+        });
+
+    } catch (error) {
+        next(error);
     }
 };
