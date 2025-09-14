@@ -107,6 +107,44 @@ export const getTradeDetails = async (req, res, next) => {
     }
 };
 
+/**
+ * @desc    Seller accepts a trade request
+ * @route   POST /api/trades/:id/accept
+ * @access  Private (Seller of the trade)
+ */
+export const acceptTrade = async (req, res, next) => {
+    try {
+        const trade = await Trade.findById(req.params.id);
+
+        if (!trade) {
+            return next(new AppError('Trade not found.', 404));
+        }
+
+        if (trade.sellerId.toString() !== req.user._id.toString()) {
+            return next(new AppError('Only the seller can accept this trade.', 403));
+        }
+        
+        if (trade.status !== 'pending') {
+            return next(new AppError('This trade cannot be accepted at this time.', 400));
+        }
+
+        trade.status = 'accepted';
+        trade.acceptedAt = Date.now();
+        await trade.save();
+        
+        // TODO: Implement WebSocket notification to buyer
+
+        res.status(200).json({
+            success: true,
+            message: 'Trade accepted. Waiting for buyer to confirm payment.',
+            data: trade,
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
 
 /**
  * @desc    Buyer confirms they have paid the seller fiat
@@ -125,7 +163,7 @@ export const confirmPayment = async (req, res, next) => {
             return next(new AppError('Only the buyer can confirm payment.', 403));
         }
         
-        if (trade.status !== 'pending') {
+        if (trade.status !== 'accepted') {
             return next(new AppError('This trade is not awaiting payment confirmation.', 400));
         }
 

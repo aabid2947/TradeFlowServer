@@ -36,6 +36,7 @@ const tradeSchema = new mongoose.Schema({
     type: String,
     enum: [
       'pending',        // PIVOT: Change for FUN-token-only testing - simplified status
+      'accepted',       // Seller has accepted the trade request
       'paid',           // PIVOT: Change for FUN-token-only testing - buyer confirmed payment
       'completed',      // PIVOT: Change for FUN-token-only testing - FUN token swap completed
       'cancelled',      // Trade cancelled by a user
@@ -49,6 +50,9 @@ const tradeSchema = new mongoose.Schema({
   //   type: String,
   // },
   // PIVOT: Change for FUN-token-only testing - added timestamps for trade lifecycle
+  acceptedAt: {
+    type: Date,
+  },
   paidAt: {
     type: Date,
   },

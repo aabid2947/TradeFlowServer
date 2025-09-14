@@ -2,6 +2,7 @@ import express from 'express';
 import { 
     initiateTrade,
     getTradeDetails,
+    acceptTrade,
     confirmPayment,
     completeTrade, // PIVOT: Change for FUN-token-only testing - renamed from releaseUsdt
     getMyTrades,
@@ -34,6 +35,11 @@ router.get('/pending-for-me', authorize('seller', 'buyer'), getPendingTradesForS
 // @desc    Get details of a single trade
 // @access  Private (Participants only)
 router.get('/:id', getTradeDetails);
+
+// @route   POST /api/trades/:id/accept
+// @desc    Seller accepts a trade request
+// @access  Private (Seller of this trade only)
+router.post('/:id/accept', authorize('seller'), acceptTrade);
 
 // @route   POST /api/trades/:id/confirm-payment
 // @desc    Buyer confirms they have sent the fiat payment
