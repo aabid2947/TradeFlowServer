@@ -13,7 +13,8 @@ import {
   changePassword,
   getAllUsers,
   transferTokens,
-  deactivateAccount
+  deactivateAccount,
+  completeProfile
 } from '../controllers/userController.js';
 import {
   authenticate,
@@ -46,6 +47,7 @@ router.get('/profile', getProfile);
 router.get('/dashboard-stats', getDashboardStats);
 router.put('/profile', validateProfileUpdate, updateProfile);
 router.put('/change-password', validatePasswordChange, changePassword);
+router.post('/complete-profile', completeProfile);
 
 // Logout routes
 router.post('/logout', logout);

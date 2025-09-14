@@ -120,6 +120,10 @@ const userSchema = new mongoose.Schema({
     type: String,
     enum: ['local', 'google'],
     default: 'local'
+  },
+  isProfileComplete: {
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true,

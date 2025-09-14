@@ -41,16 +41,16 @@ export const validateRegistration = [
     .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#+\-_=])[A-Za-z\d@$!%*?&#+\-_=]+$/)
     .withMessage('Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character'),
   
-  body('role')
-    .isIn(['buyer', 'seller'])
-    .withMessage('Role must be either buyer or seller'),
+  // body('role')
+  //   .isIn(['buyer', 'seller'])
+  //   .withMessage('Role must be either buyer or seller'),
   
-  body('businessName')
-    .if(body('role').equals('seller'))
-    .notEmpty()
-    .withMessage('Business name is required for sellers')
-    .isLength({ min: 2, max: 100 })
-    .withMessage('Business name must be between 2 and 100 characters'),
+  // body('businessName')
+  //   .if(body('role').equals('seller'))
+  //   .notEmpty()
+  //   .withMessage('Business name is required for sellers')
+  //   .isLength({ min: 2, max: 100 })
+  //   .withMessage('Business name must be between 2 and 100 characters'),
   
   body('phoneNumber')
     .optional()

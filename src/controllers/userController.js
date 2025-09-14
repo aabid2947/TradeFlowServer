@@ -5,12 +5,13 @@ import jwt from 'jsonwebtoken';
 // Register a new user
 export const register = async (req, res, next) => {
   try {
-    const { username, email, password, role, businessName, phoneNumber, address } = req.body;
+    const { username, email, password, role, businessName, phoneNumber, address, firebaseUid } = req.body;
 
     // Check if user already exists
     const existingUser = await User.findOne({
       $or: [{ email }, { username }]
     });
+    console.log(existingUser)
 
     if (existingUser) {
       if (existingUser.email === email) {
@@ -21,15 +22,25 @@ export const register = async (req, res, next) => {
       }
     }
 
-    // Create user object
+    // Create user object - for regular signup without role, profile is incomplete
     const userData = {
       username,
       email,
       password,
-      role,
       phoneNumber,
-      address
+      address,
+      isProfileComplete: !!role // Profile is complete only if role is provided (onboarding flow)
     };
+
+    // Add role if provided (from onboarding)
+    if (role) {
+      userData.role = role;
+    }
+
+    // Add Firebase UID if provided
+    if (firebaseUid) {
+      userData.firebaseUid = firebaseUid;
+    }
 
     // Add business name for sellers
     if (role === 'seller' && businessName) {
@@ -72,8 +83,9 @@ export const login = async (req, res, next) => {
     const { identifier, password } = req.body;
 
     // Authenticate user
+    console.log(identifier)
     const user = await User.getAuthenticated(identifier, password);
-
+    console.log(user)
     // Generate tokens
     const token = user.generateToken();
     const refreshToken = user.generateRefreshToken();
@@ -134,7 +146,8 @@ export const googleAuth = async (req, res, next) => {
         googleId: uid,
         role: 'buyer', // Default role
         isVerified: true, // Google accounts are pre-verified
-        authProvider: 'google'
+        authProvider: 'google',
+        isProfileComplete: false // New users need to complete profile
       };
 
       user = await User.create(userData);
@@ -518,3 +531,54 @@ export const deactivateAccount = async (req, res, next) => {
     next(error);
   }
 };
+
+// Complete user profile after first-time Google sign-in
+export const completeProfile = async (req, res, next) => {
+  try {
+    const userId = req.user._id;
+    const { username, role, phoneNumber, address, businessName } = req.body;
+
+    // Check if username is already taken by another user
+    const existingUser = await User.findOne({
+      username: username,
+      _id: { $ne: userId }
+    });
+
+    if (existingUser) {
+      return next(new AppError('Username already taken', 400));
+    }
+
+    // Prepare update data
+    const updateData = {
+      username,
+      role,
+      phoneNumber: phoneNumber || undefined,
+      address: address || undefined,
+      isProfileComplete: true
+    };
+
+    // Add business name for sellers
+    if (role === 'seller' && businessName) {
+      updateData.businessName = businessName;
+    }
+
+    // Update user
+    const user = await User.findByIdAndUpdate(
+      userId,
+      updateData,
+      { new: true, runValidators: true }
+    ).select('-password -refreshTokens');
+
+    res.json({
+      success: true,
+      message: 'Profile completed successfully',
+      data: {
+        user
+      }
+    });
+
+  } catch (error) {
+    next(error);
+  }
+};
+
