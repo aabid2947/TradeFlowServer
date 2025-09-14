@@ -43,6 +43,7 @@ export const createListing = async (req, res, next) => {
         const listing = await Listing.create({
             sellerId,
             funTokenAmount,
+            remainingTokens: funTokenAmount, // Initialize remaining tokens to the full amount
             priceInFunToken,
             minLimit,
             maxLimit,
@@ -67,9 +68,12 @@ export const createListing = async (req, res, next) => {
  */
 export const getActiveListings = async (req, res, next) => {
     try {
-        const listings = await Listing.find({ status: 'active' })
+        const listings = await Listing.find({ 
+            status: 'active',
+            remainingTokens: { $gt: 0 } // Only show listings with tokens remaining
+        })
             .populate('sellerId', 'username')
-            .sort({ pricePerUsdt: 1, createdAt: -1 }); // Sort by best price, then newest
+            .sort({ priceInFunToken: 1, remainingTokens: -1, createdAt: -1 }); // Sort by best price, then most tokens available, then newest
 
         res.status(200).json({
             success: true,

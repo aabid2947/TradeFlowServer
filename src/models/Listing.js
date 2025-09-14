@@ -24,6 +24,11 @@ const listingSchema = new mongoose.Schema({
     required: [true, 'FUN token amount is required'],
     min: [1, 'Must list at least 1 FUN token'],
   },
+  remainingTokens: {
+    type: Number,
+    required: [true, 'Remaining tokens field is required'],
+    min: [0, 'Remaining tokens cannot be negative'],
+  },
   priceInFunToken: {
     type: Number,
     required: [true, 'Price in FUN tokens is required'],
@@ -57,6 +62,18 @@ listingSchema.pre('save', function(next) {
     // PIVOT: Change for FUN-token-only testing - updated validation for funTokenAmount
     if (this.maxLimit > this.funTokenAmount) {
         next(new Error('Maximum limit cannot be greater than the total FUN token amount.'));
+    }
+    // Initialize remainingTokens to funTokenAmount if not set (for new listings)
+    if (this.isNew && !this.remainingTokens) {
+        this.remainingTokens = this.funTokenAmount;
+    }
+    // Validate remainingTokens cannot be more than original amount
+    if (this.remainingTokens > this.funTokenAmount) {
+        next(new Error('Remaining tokens cannot be more than the original token amount.'));
+    }
+    // Automatically mark as completed if no tokens remain
+    if (this.remainingTokens === 0 && this.status === 'active') {
+        this.status = 'completed';
     }
     next();
 });

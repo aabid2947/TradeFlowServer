@@ -29,6 +29,11 @@ export const initiateTrade = async (req, res, next) => {
             throw new AppError('You cannot buy from your own listing.', 400);
         }
 
+        // Check if enough tokens are available
+        if (funTokenAmount > listing.remainingTokens) {
+            throw new AppError(`Only ${listing.remainingTokens} FUN tokens are available for purchase.`, 400);
+        }
+
         // PIVOT: Change for FUN-token-only testing - check against funTokenAmount limits
         if (funTokenAmount < listing.minLimit || funTokenAmount > listing.maxLimit) {
             throw new AppError(`You can only buy between ${listing.minLimit} and ${listing.maxLimit} FUN tokens.`, 400);
@@ -233,7 +238,23 @@ export const completeTrade = async (req, res, next) => {
             { session }
         );
 
-        // 4. Mark the trade as completed
+        // 4. Update the listing's remaining tokens
+        const listing = await Listing.findById(trade.listingId).session(session);
+        if (!listing) {
+            throw new AppError('Associated listing not found.', 404);
+        }
+        
+        listing.remainingTokens -= trade.funTokenAmount;
+        
+        // If all tokens are sold, mark listing as completed
+        if (listing.remainingTokens <= 0) {
+            listing.status = 'completed';
+            listing.remainingTokens = 0; // Ensure it doesn't go negative
+        }
+        
+        await listing.save({ session });
+
+        // 5. Mark the trade as completed
         trade.status = 'completed';
         trade.completedAt = Date.now();
         await trade.save({ session });
