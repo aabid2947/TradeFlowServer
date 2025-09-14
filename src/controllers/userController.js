@@ -5,26 +5,22 @@ import jwt from 'jsonwebtoken';
 // Register a new user
 export const register = async (req, res, next) => {
   try {
-    const { username, email, password, role, businessName, phoneNumber, address, firebaseUid } = req.body;
+    const {  email, password, role, businessName, phoneNumber, address, firebaseUid } = req.body;
 
     // Check if user already exists
     const existingUser = await User.findOne({
-      $or: [{ email }, { username }]
+      $or: [{ email }]
     });
-    console.log(existingUser)
 
     if (existingUser) {
       if (existingUser.email === email) {
         return next(new AppError('Email already registered', 400));
       }
-      if (existingUser.username === username) {
-        return next(new AppError('Username already taken', 400));
-      }
+     
     }
 
     // Create user object - for regular signup without role, profile is incomplete
     const userData = {
-      username,
       email,
       password,
       phoneNumber,
